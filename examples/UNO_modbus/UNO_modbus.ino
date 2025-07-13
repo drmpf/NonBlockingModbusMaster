@@ -76,7 +76,7 @@ void loop() {
       Serial.print("Error: "); nbModbusMaster.printHex(err, Serial); Serial.println();
     } else {
       Serial.print("response Len "); Serial.print(nbModbusMaster.getResponseBufferLength()); Serial.print("  ");
-      for (int i = 0; i < nbModbusMaster.getResponseBufferLength(); i++) {
+      for (size_t i = 0; i < nbModbusMaster.getResponseBufferLength(); i++) {
         nbModbusMaster.printHex(nbModbusMaster.getResponseBuffer(i), Serial); Serial.print(" ");
       }
       Serial.println();

@@ -1,6 +1,5 @@
-// UNO_modbus_chaining.ino
-//
-// NonBlockingModbusMaster on UNO using software serial
+// UNO_modbus_simple_chaining.ino
+// NonBlockingModbusMaster multiple reads on UNO using software serial
 //AltSoftSerial on Arduino Uno       TX pin 9        RX pin 8        PWM used pin 10
 
 /**
@@ -17,14 +16,20 @@
 #include "loopTimer.h"
 #include "millisDelay.h"
 
+// list of addresses to read and array to place readings in
+#define NUM_REGISTERS 16
+int registerAddresses[] = {0, 2, 7, 19, 25, 30, 31, 40, 41, 50, 51, 60, 61, 97, 98, 99};
+uint16_t data[NUM_REGISTERS];
+size_t addressIdx = 0; // keep track of which address to read
+ 
 AltSoftSerial altSerial;
 const long baudrate = 9600;
 NonBlockingModbusMaster nbModbusMaster;
 millisDelay samplingDelay;
 unsigned long sampleInterval_ms = 3000; // timeout is 2000
 
-bool readAddr_0();
-bool readAddr_2();
+bool readAddr();
+bool processAddr();
 
 const int MAX_RETRIES = 1; // retry once if timeout
 
@@ -39,8 +44,8 @@ void setup() {
   Serial.println();
 
   Serial.println("NonBlockingModbusMaster on UNO using AltSoftSerial ");
-  Serial.println("  reading Slave ID: 1, Holding Register Address:0, Qty 2 ");
-  Serial.println("  and then readHoldingRegister Address:2, Qty 2 and then finish." );
+  Serial.println("  reading Slave ID: 1, Holding Registers listed in registerAddresses[]");
+  Serial.println("  store results in data[] and then finish." );
   altSerial.begin(baudrate);
 
   // MODBUS over serial line specification and implementation guide V1.02
@@ -53,13 +58,12 @@ void setup() {
   // ~3.28ms (4ms) for 9600 baud, or 0.84ms (1ms) for 34800 baud
 
   nbModbusMaster.initialize(altSerial, preDelayBR, postDelayBR); // default timeout 2000ms (2sec)
-  //  nbModbusMaster.initialize(altSerial, preDelayBR, postDelayBR, 1000); // for 1000ms (1sec) timeout
   samplingDelay.start(sampleInterval_ms);
 }
 
-void processAddr_0(NonBlockingModbusMaster &mb) {
+void processAddr(NonBlockingModbusMaster &mb) {
   static int retryCount = 0;
-  Serial.println(" in processAddr_0()");
+  Serial.print(" in processData() for addressIdx:"); Serial.println(addressIdx);
   // check for errors
   int err = mb.getError(); // 0 for OK
   if (err) {
@@ -73,6 +77,7 @@ void processAddr_0(NonBlockingModbusMaster &mb) {
     retryCount = 0; // success
   }
   if (!err) {
+    data[addressIdx] = mb.getResponseBuffer(0);
     Serial.print("response Len "); Serial.print(mb.getResponseBufferLength()); Serial.print("  ");
     for (size_t i = 0; i < mb.getResponseBufferLength(); i++) {
       mb.printHex(mb.getResponseBuffer(i), Serial); Serial.print(" ");
@@ -80,42 +85,20 @@ void processAddr_0(NonBlockingModbusMaster &mb) {
     Serial.println();
   }
   // else err continue or not?? can stop here by not calling readAddr_2()
-
-  readAddr_2(); // chain to read from addr 2 qty 2, this call will not fail as last cmd has finished
+  addressIdx++;
+  if (addressIdx < NUM_REGISTERS) { // read next address
+    //mb.oneTimeDelay(10); // add delay here if needed.
+    // but in this example could just increase preDelayBR instead
+    readAddr(); 
+  } 
+  // else finish here
 }
 
-void processAddr_2(NonBlockingModbusMaster &mb) {
-  static int retryCount = 0;
-  Serial.println(" in processAddr_2()");
-  // check for errors
-  int err = mb.getError(); // 0 for OK
-  if (err) {
-    Serial.print("Error: "); mb.printHex(err, Serial); Serial.println();
-    if ((err == nbModbusMaster.ku8MBResponseTimedOut) && (retryCount < MAX_RETRIES)) {
-      retryCount++;
-      Serial.println(" Retry");
-      mb.retry(); // send same cmd again
-    }
-  } else {
-    retryCount = 0; // success
-  }
-  if (!err) {
-    Serial.print("response Len "); Serial.print(mb.getResponseBufferLength()); Serial.print("  ");
-    for (int i = 0; i < mb.getResponseBufferLength(); i++) {
-      mb.printHex(mb.getResponseBuffer(i), Serial); Serial.print(" ");
-    }
-    Serial.println();
-  }
-  // finish here
+
+bool readAddr() {
+  return nbModbusMaster.readHoldingRegisters(1, registerAddresses[addressIdx], 1, processAddr); // add processing fn to save results and continue
 }
 
-bool readAddr_0() {
-  return nbModbusMaster.readHoldingRegisters(1, 0, 2, processAddr_0); // add processing fn
-}
-
-bool readAddr_2() {
-  return nbModbusMaster.readHoldingRegisters(1, 2, 2, processAddr_2); // add processing fn
-}
 
 void loop() {
   // loopTimer.check(Serial);
@@ -124,12 +107,15 @@ void loop() {
     samplingDelay.restart();
     if (!nbModbusMaster.isProcessing()) {
       Serial.println(" ++ start block reads ");
-      readAddr_0();
+      addressIdx = 0;
+      readAddr();
     } else {
       Serial.println(" Still processing skip this restart");
     }
   }
 
+  // this will return false and be ignored if nbModbusMaster is still processing the last cmd
+  // i.e. if nbModbusMaster.isProcessing() returns true
   if (nbModbusMaster.justFinished()) {
     // all reads finished
     Serial.println(" -- Finished all reads.");

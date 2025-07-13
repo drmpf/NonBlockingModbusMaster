@@ -71,7 +71,7 @@ void processData(NonBlockingModbusMaster &mb) {
   }
   if (!err) {
     Serial.print("response Len "); Serial.print(mb.getResponseBufferLength()); Serial.print("  ");
-    for (int i = 0; i < mb.getResponseBufferLength(); i++) {
+    for (size_t i = 0; i < mb.getResponseBufferLength(); i++) {
       mb.printHex(mb.getResponseBuffer(i), Serial); Serial.print(" ");
     }
     Serial.println();

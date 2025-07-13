@@ -24,5 +24,6 @@ Provide this copyright is maintained.
 Also see LICENSE.txt for original ModbusMaster license.  
 
 # Revisions
+Version 1.0.2 added UNO_modbus_simple_chaining example.  
 Version 1.0.1 corrected printHex arg and retry() return.  
 Version 1.0.0 initial release. readHoldingRegisters is the only Modbus command fully tested due to lack of other hardware. 
